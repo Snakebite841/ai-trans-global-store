@@ -23,7 +23,10 @@ export default function AdminDashboard() {
         totalSales: 0,
         totalOrders: 0,
         activeProducts: 0,
-        totalUsers: 156 // Mocked for now
+        totalUsers: 0,
+        revenueTrend: '0%',
+        ordersTrend: '0%',
+        usersTrend: '0%'
     });
     const [chartData, setChartData] = useState([]);
     const [productsList, setProductsList] = useState([]);
@@ -46,6 +49,24 @@ export default function AdminDashboard() {
             let totalRevenue = 0;
             const chartMap = {};
 
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            const isCurrentMonth = (date) => date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+            const isLastMonth = (date) => {
+                const lastMonthDate = new Date(now);
+                lastMonthDate.setMonth(now.getMonth() - 1);
+                return date.getMonth() === lastMonthDate.getMonth() && date.getFullYear() === lastMonthDate.getFullYear();
+            };
+
+            let currentMonthRevenue = 0;
+            let lastMonthRevenue = 0;
+            let currentMonthOrders = 0;
+            let lastMonthOrders = 0;
+            let currentMonthUsers = 0;
+            let lastMonthUsers = 0;
+
             querySnapshot.forEach((doc) => {
                 const order = { id: doc.id, ...doc.data() };
                 fetchedOrders.push(order);
@@ -53,11 +74,39 @@ export default function AdminDashboard() {
                 totalRevenue += amount;
 
                 if (order.createdAt) {
-                    const date = new Date(order.createdAt.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                    if (!chartMap[date]) chartMap[date] = 0;
-                    chartMap[date] += amount;
+                    // Check if createdAt is a Firestore instance or an ISO string (orders are usually Firestore Instances)
+                    const date = order.createdAt.seconds ? new Date(order.createdAt.seconds * 1000) : new Date(order.createdAt);
+
+                    const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    if (!chartMap[dateStr]) chartMap[dateStr] = 0;
+                    chartMap[dateStr] += amount;
+
+                    if (isCurrentMonth(date)) {
+                        currentMonthRevenue += amount;
+                        currentMonthOrders += 1;
+                    } else if (isLastMonth(date)) {
+                        lastMonthRevenue += amount;
+                        lastMonthOrders += 1;
+                    }
                 }
             });
+
+            usersSnapshot.forEach(doc => {
+                const user = doc.data();
+                if (user.createdAt) {
+                    const date = new Date(user.createdAt);
+                    if (isCurrentMonth(date)) currentMonthUsers += 1;
+                    else if (isLastMonth(date)) lastMonthUsers += 1;
+                } else {
+                    currentMonthUsers += 1;
+                }
+            });
+
+            const calculateTrend = (current, previous) => {
+                if (previous === 0) return current > 0 ? "+100%" : "0%";
+                const percentage = ((current - previous) / previous) * 100;
+                return `${percentage >= 0 ? '+' : ''}${percentage.toFixed(1)}%`;
+            };
 
             const dates = Object.keys(chartMap).sort((a, b) => new Date(a) - new Date(b));
 
@@ -76,13 +125,15 @@ export default function AdminDashboard() {
             setOrders(fetchedOrders);
             setChartData(formattedChartData);
             setProductsList(fetchedProducts);
-            setStats(prev => ({
-                ...prev,
+            setStats({
                 totalOrders: fetchedOrders.length,
                 totalSales: totalRevenue,
                 activeProducts: productSnapshot.size,
-                totalUsers: usersSnapshot.size
-            }));
+                totalUsers: usersSnapshot.size,
+                revenueTrend: calculateTrend(currentMonthRevenue, lastMonthRevenue),
+                ordersTrend: calculateTrend(currentMonthOrders, lastMonthOrders),
+                usersTrend: calculateTrend(currentMonthUsers, lastMonthUsers)
+            });
 
         } catch (error) {
             console.error("Error fetching admin data:", error);
@@ -153,13 +204,13 @@ export default function AdminDashboard() {
                             value={stats.totalSales}
                             prefix="GH₵ "
                             icon={Coins}
-                            trend="+12.5%"
+                            trend={stats.revenueTrend}
                         />
                         <StatCard
                             title="Total Orders"
                             value={stats.totalOrders}
                             icon={ShoppingBag}
-                            trend="+5.2%"
+                            trend={stats.ordersTrend}
                         />
                         <StatCard
                             title="Active Products"
@@ -170,7 +221,7 @@ export default function AdminDashboard() {
                             title="Total Users"
                             value={stats.totalUsers}
                             icon={Users}
-                            trend="+18%"
+                            trend={stats.usersTrend}
                         />
                     </div>
 
