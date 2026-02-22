@@ -34,10 +34,12 @@ export default function AdminDashboard() {
         try {
             const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
             const p = query(collection(db, 'products'));
+            const u = query(collection(db, 'users'));
 
-            const [querySnapshot, productSnapshot] = await Promise.all([
+            const [querySnapshot, productSnapshot, usersSnapshot] = await Promise.all([
                 getDocs(q),
-                getDocs(p)
+                getDocs(p),
+                getDocs(u)
             ]);
 
             const fetchedOrders = [];
@@ -78,7 +80,8 @@ export default function AdminDashboard() {
                 ...prev,
                 totalOrders: fetchedOrders.length,
                 totalSales: totalRevenue,
-                activeProducts: productSnapshot.size
+                activeProducts: productSnapshot.size,
+                totalUsers: usersSnapshot.size
             }));
 
         } catch (error) {
